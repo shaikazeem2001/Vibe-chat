@@ -5,6 +5,8 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { StreamChat } = require("stream-chat");
 const multer = require("multer");
+const { authLimiter, uploadLimiter } = require("../middleware/rateLimit.middleware");
+const { generateToken, sendPasswordResetEmail, sendVerificationEmail } = require("../config/email");
 
 // Configure Multer for processing file upload buffers locally
 const upload = multer({
@@ -54,8 +56,20 @@ router.post("/signup", async (req, res) => {
       return res.status(500).json({ message: "Failed to create user", error: insertError.message });
     }
 
+    // Send email verification (non-blocking — don't fail signup if email errors)
+    try {
+      const verifyToken = generateToken();
+      const verifyExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      await supabase.from('auth_tokens').insert([
+        { token: verifyToken, user_id: newUser.id, type: 'email_verify', expires_at: verifyExpiresAt, used: false }
+      ]);
+      await sendVerificationEmail(newUser.username, newUser.email, verifyToken);
+    } catch (emailErr) {
+      console.error("Verification email failed (non-fatal):", emailErr.message);
+    }
+
     return res.status(201).json({
-      message: "User registered successfully",
+      message: "User registered successfully. Please check your email to verify your account.",
     });
 
   } catch (error) {
@@ -210,7 +224,7 @@ router.put("/profile", authMiddleware, async (req, res) => {
 });
 
 // Upload Avatar Image to Supabase Storage
-router.post("/profile/avatar", authMiddleware, upload.single("avatarData"), async (req, res) => {
+router.post("/profile/avatar", authMiddleware, uploadLimiter, upload.single("avatarData"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: "No image file provided" });
@@ -301,8 +315,107 @@ router.delete("/profile", authMiddleware, async (req, res) => {
   }
 });
 
+// ─── Forgot Password ────────────────────────────────────────────────────────
+router.post("/forgot-password", authLimiter, async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, username, email')
+      .eq('email', email)
+      .single();
+
+    // Silent success — never leak whether an account exists
+    if (!user) return res.json({ message: "If that email is registered, a reset link has been sent." });
+
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 min
+
+    // Invalidate any existing unused reset tokens for this user
+    await supabase
+      .from('auth_tokens')
+      .update({ used: true })
+      .eq('user_id', user.id)
+      .eq('type', 'password_reset')
+      .eq('used', false);
+
+    await supabase.from('auth_tokens').insert([
+      { token, user_id: user.id, type: 'password_reset', expires_at: expiresAt, used: false }
+    ]);
+
+    await sendPasswordResetEmail(user.username, user.email, token);
+
+    return res.json({ message: "If that email is registered, a reset link has been sent." });
+  } catch (err) {
+    console.error("Forgot Password Error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
+// ─── Reset Password ──────────────────────────────────────────────────────────
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: "Token and new password are required" });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters" });
+    }
+
+    const { data: record, error } = await supabase
+      .from('auth_tokens')
+      .select('*')
+      .eq('token', token)
+      .eq('type', 'password_reset')
+      .single();
+
+    if (error || !record || record.used || new Date(record.expires_at) < new Date()) {
+      return res.status(400).json({ message: "Invalid or expired reset token" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await supabase.from('users').update({ password: hashedPassword }).eq('id', record.user_id);
+    await supabase.from('auth_tokens').update({ used: true }).eq('id', record.id);
+
+    return res.json({ message: "Password reset successfully. You can now log in." });
+  } catch (err) {
+    console.error("Reset Password Error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
+// ─── Verify Email ─────────────────────────────────────────────────────────────
+router.get("/verify-email", async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ message: "Token is required" });
+
+    const { data: record, error } = await supabase
+      .from('auth_tokens')
+      .select('*')
+      .eq('token', token)
+      .eq('type', 'email_verify')
+      .single();
+
+    if (error || !record || record.used || new Date(record.expires_at) < new Date()) {
+      return res.status(400).json({ message: "Invalid or expired verification link" });
+    }
+
+    await supabase.from('users').update({ email_verified: true }).eq('id', record.user_id);
+    await supabase.from('auth_tokens').update({ used: true }).eq('id', record.id);
+
+    return res.json({ message: "Email verified successfully! You can now log in." });
+  } catch (err) {
+    console.error("Verify Email Error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
 // login routes
-router.post("/login", async (req, res) => {
+router.post("/login", authLimiter, async (req, res) => {
   if (!process.env.JWT_SECRET) {
     console.error("CRITICAL ERROR: JWT_SECRET is not defined in environment variables.");
     return res.status(500).json({ message: "Server configuration error" });
@@ -389,29 +502,33 @@ router.post("/logout", (req, res) => {
 // Stream Token generator for authenticated users
 router.get("/stream-token", authMiddleware, async (req, res) => {
   try {
-    if (!process.env.STREAM_API_KEY || !process.env.STREAM_API_SECRET) {
-      console.error("Stream API credentials missing from backend .env");
-      return res.status(500).json({ message: "Stream API credentials not configured" });
+    const apiKey = process.env.STREAM_API_KEY;
+    const apiSecret = process.env.STREAM_API_SECRET;
+
+    if (!apiKey || !apiSecret || apiKey.startsWith('REPLACE') || apiSecret.startsWith('REPLACE')) {
+      console.error("[stream-token] Stream credentials are missing or still set to placeholder values.");
+      console.error("  → Add STREAM_API_KEY and STREAM_API_SECRET to Backend/.env");
+      console.error("  → Get them at: https://dashboard.getstream.io → your app → Overview");
+      return res.status(503).json({
+        message: "Stream credentials not configured on the server.",
+        hint: "Add STREAM_API_KEY and STREAM_API_SECRET to your Backend/.env file."
+      });
     }
-    
-    const serverClient = StreamChat.getInstance(
-      process.env.STREAM_API_KEY, 
-      process.env.STREAM_API_SECRET
-    );
 
-    // Upsert the user into Stream explicitly with 'admin' to prevent 403 Forbidden reading public channels
-    await serverClient.upsertUser({
-      id: req.user.id,
-      role: 'admin',
-    });
+    const serverClient = StreamChat.getInstance(apiKey, apiSecret);
 
-    // Create a token that never expires
+    // Upsert the user — non-fatal: token is valid even if this fails
+    try {
+      await serverClient.upsertUser({ id: req.user.id, role: 'admin' });
+    } catch (upsertErr) {
+      console.warn("[stream-token] upsertUser failed (non-fatal):", upsertErr.message);
+    }
+
     const token = serverClient.createToken(req.user.id);
-    
     res.json({ token, userId: req.user.id });
   } catch (err) {
-    console.error("Generate Stream Token Error:", err);
-    res.status(500).json({ message: "Failed to generate stream token" });
+    console.error("[stream-token] Error:", err.message);
+    res.status(500).json({ message: "Failed to generate stream token", detail: err.message });
   }
 });
 
@@ -419,34 +536,36 @@ router.get("/stream-token", authMiddleware, async (req, res) => {
 router.post("/guest-stream-token", async (req, res) => {
   try {
     const { guestId } = req.body;
-    
+
     if (!guestId || !guestId.startsWith("guest_")) {
       return res.status(400).json({ message: "Invalid guest ID format." });
     }
 
-    if (!process.env.STREAM_API_KEY || !process.env.STREAM_API_SECRET) {
-      console.error("Stream API credentials missing from backend .env");
-      return res.status(500).json({ message: "Stream API credentials not configured" });
-    }
-    
-    const serverClient = StreamChat.getInstance(
-      process.env.STREAM_API_KEY, 
-      process.env.STREAM_API_SECRET
-    );
+    const apiKey = process.env.STREAM_API_KEY;
+    const apiSecret = process.env.STREAM_API_SECRET;
 
-    // Upsert the guest user into Stream explicitly
-    await serverClient.upsertUser({
-      id: guestId,
-      name: 'Guest User',
-      role: 'admin', // Assign admin to prevent 403 errors on general channels
-    });
+    if (!apiKey || !apiSecret || apiKey.startsWith('REPLACE') || apiSecret.startsWith('REPLACE')) {
+      console.error("[guest-stream-token] Stream credentials missing or placeholder.");
+      return res.status(503).json({
+        message: "Stream credentials not configured on the server.",
+        hint: "Add STREAM_API_KEY and STREAM_API_SECRET to your Backend/.env file."
+      });
+    }
+
+    const serverClient = StreamChat.getInstance(apiKey, apiSecret);
+
+    // Upsert guest — non-fatal
+    try {
+      await serverClient.upsertUser({ id: guestId, name: 'Guest User', role: 'admin' });
+    } catch (upsertErr) {
+      console.warn("[guest-stream-token] upsertUser failed (non-fatal):", upsertErr.message);
+    }
 
     const token = serverClient.createToken(guestId);
-    
     res.json({ token, userId: guestId });
   } catch (err) {
-    console.error("Generate Guest Stream Token Error:", err);
-    res.status(500).json({ message: "Failed to generate guest stream token" });
+    console.error("[guest-stream-token] Error:", err.message);
+    res.status(500).json({ message: "Failed to generate guest stream token", detail: err.message });
   }
 });
 

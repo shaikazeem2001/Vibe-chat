@@ -3,18 +3,21 @@ const crypto = require("crypto");
 
 exports.getRooms = async (req, res) => {
   try {
+    // Use explicit FK hint to resolve the PGRST201 ambiguity:
+    // rooms has TWO relationships to users (created_by FK + room_members junction)
+    // We want the creator's username via the direct FK, not the many-to-many.
     const { data: rooms, error } = await supabase
       .from('rooms')
-      .select('*, users(username)');
-    
+      .select('*, users!rooms_created_by_fkey(username)');
+
     if (error) throw error;
-    
+
     // Transform to match frontend expectation (populated createdBy)
     const transformedRooms = rooms.map(room => ({
       ...room,
       createdBy: room.users ? { username: room.users.username } : null
     }));
-    
+
     res.json(transformedRooms);
   } catch (err) {
     console.error("Fetch rooms error:", err);

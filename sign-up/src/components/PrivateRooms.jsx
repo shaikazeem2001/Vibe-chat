@@ -2,11 +2,13 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, Plus, Key, ArrowRight, ShieldCheck, Loader2, Globe, X, Copy, CheckCircle2 } from "lucide-react";
 import axios from "../api/Axios";
+import { usePrivateRooms } from "../api/hooks";
+import { ConvListSkeleton } from "./Skeletons";
 
 
 const PrivateRooms = () => {
     const navigate = useNavigate();
-    const [rooms, setRooms] = useState([]);
+    const { data: rooms = [], isLoading: roomsLoading } = usePrivateRooms();
     const [roomName, setRoomName] = useState("");
     const [roomCode, setRoomCode] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -14,12 +16,6 @@ const PrivateRooms = () => {
     const [newCommunity, setNewCommunity] = useState({ name: "", description: "", isPrivate: false });
     const [createdRoom, setCreatedRoom] = useState(null);
     const isGuest = localStorage.getItem("isGuest") === "true";
-
-    useEffect(() => {
-        const savedRooms = JSON.parse(localStorage.getItem("joinedCommunities") || "[]");
-        const privateOnly = savedRooms.filter(r => r.isPrivate);
-        setRooms(privateOnly);
-    }, []);
 
     const joinRoomByCode = async () => {
         if (!roomCode.trim()) return;
@@ -98,7 +94,9 @@ const PrivateRooms = () => {
                 <section>
                     <h2 className="text-gray-500 font-bold uppercase tracking-widest text-xs mb-4 px-1">Your Rooms</h2>
                     <div className="space-y-4">
-                        {rooms.length > 0 ? (
+                        {roomsLoading ? (
+                            <ConvListSkeleton count={3} />
+                        ) : rooms.length > 0 ? (
                             rooms.map((room) => (
                                 <div
                                     key={room._id}

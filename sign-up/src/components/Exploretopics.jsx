@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Zap,
@@ -12,12 +12,19 @@ import {
   TrendingUp,
   Compass
 } from "lucide-react";
+import { TopicGridSkeleton } from "./Skeletons";
 
 const Exploretopics = () => {
   const navigate = useNavigate();
   const fullRoom = localStorage.getItem("room") || "General";
   const baseCommunity = fullRoom.includes(":") ? fullRoom.split(":")[0] : fullRoom;
   const [searchTerm, setSearchTerm] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setIsLoading(false), 600);
+    return () => clearTimeout(t);
+  }, []);
 
   const topics = [
     { id: "anime", name: "Anime", icon: <Zap size={24} />, color: "text-yellow-400", bg: "bg-yellow-400/10", desc: "Latest series, discussions, and fan art." },
@@ -81,41 +88,47 @@ const Exploretopics = () => {
       </div>
 
       {/* Topic Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredTopics.map((topic) => (
-          <button
-            key={topic.id}
-            onClick={() => joinTopic(topic.id)}
-            className="group relative flex flex-col items-start p-8 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-800 rounded-3xl text-left hover:border-gray-300 dark:hover:border-white/20 hover:bg-gray-100 dark:hover:bg-gray-800/40 transition-all duration-300 shadow-xl overflow-hidden active:scale-[0.98]"
-          >
-            {/* Hover Gradient */}
-            <div className="absolute inset-0 bg-gradient-to-br from-black/5 dark:from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+      {isLoading ? (
+        <TopicGridSkeleton count={6} />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredTopics.map((topic) => (
+              <button
+                key={topic.id}
+                onClick={() => joinTopic(topic.id)}
+                className="group relative flex flex-col items-start p-8 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-800 rounded-3xl text-left hover:border-gray-300 dark:hover:border-white/20 hover:bg-gray-100 dark:hover:bg-gray-800/40 transition-all duration-300 shadow-xl overflow-hidden active:scale-[0.98]"
+              >
+                {/* Hover Gradient */}
+                <div className="absolute inset-0 bg-gradient-to-br from-black/5 dark:from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
 
-            <div className={`p-4 rounded-2xl mb-6 ${topic.bg} ${topic.color} transition-transform group-hover:scale-110 duration-500`}>
-              {topic.icon}
+                <div className={`p-4 rounded-2xl mb-6 ${topic.bg} ${topic.color} transition-transform group-hover:scale-110 duration-500`}>
+                  {topic.icon}
+                </div>
+
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 tracking-tight group-hover:text-iris-600 dark:group-hover:text-iris-400 transition-colors">
+                  {topic.name}
+                </h3>
+                <p className="text-gray-500 dark:text-gray-500 text-sm leading-relaxed mb-6 transition-colors">
+                  {topic.desc}
+                </p>
+
+                <div className="mt-auto flex items-center gap-2 text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-widest group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+                  <span>Enter Channel</span>
+                  <span className="w-1 h-1 bg-gray-300 dark:bg-gray-600 rounded-full transition-colors"></span>
+                  <span className="text-green-500">Active</span>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {filteredTopics.length === 0 && (
+            <div className="text-center py-20 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl bg-gray-50 dark:bg-gray-900/10 transition-colors">
+              <p className="text-gray-600 dark:text-gray-500 text-xl font-medium mb-2 transition-colors">No matches found for "{searchTerm}"</p>
+              <p className="text-gray-500 dark:text-gray-600 text-sm transition-colors">Try searching for popular topics like Anime, Technology or Movies.</p>
             </div>
-
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 tracking-tight group-hover:text-iris-600 dark:group-hover:text-iris-400 transition-colors">
-              {topic.name}
-            </h3>
-            <p className="text-gray-500 dark:text-gray-500 text-sm leading-relaxed mb-6 transition-colors">
-              {topic.desc}
-            </p>
-
-            <div className="mt-auto flex items-center gap-2 text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-widest group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
-              <span>Enter Channel</span>
-              <span className="w-1 h-1 bg-gray-300 dark:bg-gray-600 rounded-full transition-colors"></span>
-              <span className="text-green-500">Active</span>
-            </div>
-          </button>
-        ))}
-      </div>
-
-      {filteredTopics.length === 0 && (
-        <div className="text-center py-20 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl bg-gray-50 dark:bg-gray-900/10 transition-colors">
-          <p className="text-gray-600 dark:text-gray-500 text-xl font-medium mb-2 transition-colors">No matches found for "{searchTerm}"</p>
-          <p className="text-gray-500 dark:text-gray-600 text-sm transition-colors">Try searching for popular topics like Anime, Technology or Movies.</p>
-        </div>
+          )}
+        </>
       )}
     </div>
   );

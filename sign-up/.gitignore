@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+VITE_STREAM_API_KEY
+VITE_STREAM_USER_TOKEN
+VITE_CLOUDINARY_CLOUD_NAME
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -25,3 +28,4 @@ dist-ssr
 VITE_API_URL
 VITE_STREAM_API_KEY
 VITE_STREAM_USER_TOKEN
+VITE_CLOUDINARY_CLOUD_NAME

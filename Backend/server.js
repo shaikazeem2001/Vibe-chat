@@ -6,6 +6,7 @@ const http = require("http");
 const path = require("path");
 const { Server } = require("socket.io");
 const supabase = require("./config/supabase");
+const { indexMessage } = require("./config/algolia");
 
 // Load ENV
 dotenv.config();
@@ -35,10 +36,12 @@ app.use(cookieParser());
 const authRoutes = require("./routes/auth.routes");
 const messageRoutes = require("./routes/message.routes");
 const roomRoutes = require("./routes/room.routes");
+const searchRoutes = require("./routes/search.routes");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/rooms", roomRoutes);
+app.use("/api/search", searchRoutes);
 
 
 // Test Route (Internal use)
@@ -109,6 +112,10 @@ io.on("connection", (socket) => {
         .single();
 
       if (msgError) throw msgError;
+
+      // Index in Algolia (non-blocking — message is already saved)
+      const senderName = newMessage.users?.username || data.senderId;
+      indexMessage(newMessage, senderName, data.room);
 
       // Emit to everyone in the room
       io.to(data.room).emit("receive_message", {

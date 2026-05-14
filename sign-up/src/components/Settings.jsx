@@ -3,6 +3,8 @@ import { User, Mail, Lock, Settings as SettingsIcon, Save, LogOut, CheckCircle2,
 import axios from "../api/Axios";
 import { useNavigate } from "react-router-dom";
 import Avatar, { genConfig } from "react-nice-avatar";
+import { useProfile } from "../api/hooks";
+import { ProfileSkeleton } from "./Skeletons";
 
 const Settings = () => {
     const navigate = useNavigate();
@@ -31,43 +33,34 @@ const Settings = () => {
     const [notifications, setNotifications] = useState(true);
     const [privacy, setPrivacy] = useState("friends");
 
-    useEffect(() => {
-        // Fetch user profile data including avatar config if not guest
-        if (isGuest) return;
+    // React Query profile — replaces manual fetchProfile useEffect
+    const { data: profileData, isLoading: profileLoading } = useProfile();
 
-        const fetchProfile = async () => {
-            try {
-                const res = await axios.get("/api/auth/profile");
-                if (res.data.user) {
-                    setUsername(res.data.user.username);
-                    setEmail(res.data.user.email);
-                    if (res.data.user.avatarConfig) {
-                        setAvatarConfig(res.data.user.avatarConfig);
-                        if (res.data.user.avatarConfig.isCustomImage) {
-                            setAvatarTab("upload");
-                        } else {
-                            setAvatarTab("memoji");
-                        }
-                    }
-                    if (res.data.user.settings) {
-                        const userTheme = res.data.user.settings.theme || "dark";
-                        setTheme(userTheme);
-                        localStorage.setItem("theme", userTheme);
-                        if (userTheme === "dark") {
-                            document.documentElement.classList.add("dark");
-                        } else {
-                            document.documentElement.classList.remove("dark");
-                        }
-                        setNotifications(res.data.user.settings.notifications);
-                        setPrivacy(res.data.user.settings.privacy || "friends");
-                    }
-                }
-            } catch (err) {
-                console.error("Failed to fetch profile:", err);
+    useEffect(() => {
+        if (!profileData) return;
+        setUsername(profileData.username);
+        setEmail(profileData.email);
+        if (profileData.avatarConfig) {
+            setAvatarConfig(profileData.avatarConfig);
+            if (profileData.avatarConfig.isCustomImage) {
+                setAvatarTab("upload");
+            } else {
+                setAvatarTab("memoji");
             }
-        };
-        fetchProfile();
-    }, [isGuest]);
+        }
+        if (profileData.settings) {
+            const userTheme = profileData.settings.theme || "dark";
+            setTheme(userTheme);
+            localStorage.setItem("theme", userTheme);
+            if (userTheme === "dark") {
+                document.documentElement.classList.add("dark");
+            } else {
+                document.documentElement.classList.remove("dark");
+            }
+            setNotifications(profileData.settings.notifications);
+            setPrivacy(profileData.settings.privacy || "friends");
+        }
+    }, [profileData]);
 
     const handleSaveProfile = async () => {
         if (isGuest) {
@@ -282,6 +275,9 @@ const Settings = () => {
 
                     {/* PROFILE SECTION */}
                     {activeTab === "profile" && (
+                        profileLoading && !isGuest ? (
+                            <ProfileSkeleton />
+                        ) : (
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <h2 className="text-xl font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-800 pb-4 transition-colors">Personal Information</h2>
 
@@ -355,6 +351,7 @@ const Settings = () => {
                                 </button>
                             </div>
                         </div>
+                        )
                     )}
 
                     {/* AVATAR SECTION */}

@@ -15,6 +15,8 @@ import {
 import 'stream-chat-react/dist/css/v2/index.css';
 import Avatar from 'react-nice-avatar';
 import axios from "../api/Axios";
+import MessageSearch from './MessageSearch';
+import { extractPublicId, avatarUrl as cldAvatarUrl } from '../utils/cloudinary';
 
 const apiKey = import.meta.env.VITE_STREAM_API_KEY;
 const userToken = import.meta.env.VITE_STREAM_USER_TOKEN;
@@ -44,9 +46,18 @@ const CustomAvatar = ({ user, name }) => {
 
   if (senderAvatar) {
     if (senderAvatar.isCustomImage && senderAvatar.url) {
+      // Attempt to serve via Cloudinary transforms (f_auto, q_auto, face-crop)
+      const publicId = extractPublicId(senderAvatar.url);
+      const optimisedSrc = publicId ? cldAvatarUrl(publicId, 80) : senderAvatar.url;
       return (
         <div className="w-10 h-10 rounded-full shadow-lg border border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 shrink-0 mx-1 overflow-hidden object-cover flex items-center justify-center">
-          <img src={senderAvatar.url} alt="User Avatar" className="w-full h-full object-cover" />
+          <img
+            src={optimisedSrc}
+            alt="User Avatar"
+            className="w-full h-full object-cover"
+            loading="lazy"
+            decoding="async"
+          />
         </div>
       );
     } else {
@@ -72,6 +83,7 @@ const ChatUI = () => {
   const [channel, setChannel] = useState(undefined);
   const isGuest = localStorage.getItem("isGuest") === "true";
   const [appTheme, setAppTheme] = useState(() => document.documentElement.classList.contains("dark") ? "str-chat__theme-dark" : "str-chat__theme-light");
+  const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
     const observer = new MutationObserver((mutations) => {
@@ -95,11 +107,15 @@ const ChatUI = () => {
 
   // Sync our local user with Stream
   useEffect(() => {
+    // Safety timeout — if auth hasn't resolved in 12s, show error instead of infinite spinner
+    const timeoutId = setTimeout(() => {
+      setAuthError('Connection timed out. The backend may be unreachable.');
+    }, 12000);
+
     if (isGuest) {
       const initGuest = async () => {
         const guestId = localStorage.getItem("userId") || 'guest_user';
         try {
-          // If Guest, we still need a valid stream token generated via backend secret
           const tokenRes = await axios.post("/api/auth/guest-stream-token", { guestId });
           setStreamUser({
             id: tokenRes.data.userId,
@@ -108,18 +124,27 @@ const ChatUI = () => {
           setDynamicToken(tokenRes.data.token);
         } catch (err) {
           console.warn("Generating Guest Token Failed. Falling back to static.", err);
-          setStreamUser({ id: guestId, name: localStorage.getItem("username") || 'Guest' });
-          setDynamicToken(userToken);
+          // Static fallback — still lets the guest see the UI if VITE_STREAM_USER_TOKEN is set
+          if (userToken) {
+            setStreamUser({ id: guestId, name: localStorage.getItem("username") || 'Guest' });
+            setDynamicToken(userToken);
+          } else {
+            setAuthError('Could not authenticate guest session. Please try refreshing.');
+          }
+        } finally {
+          clearTimeout(timeoutId);
         }
       };
       initGuest();
-      return;
+      return () => clearTimeout(timeoutId);
     }
 
     const fetchUserAndToken = async () => {
       try {
+        console.log('[ChatUI] Fetching user profile...');
         const res = await axios.get("/api/auth/profile");
         const u = res.data.user;
+        console.log('[ChatUI] Profile OK, fetching Stream token...');
 
         const mappedUser = {
           id: u.id,
@@ -132,19 +157,65 @@ const ChatUI = () => {
           const tokenRes = await axios.get("/api/auth/stream-token");
           fetchedToken = tokenRes.data.token;
           mappedUser.id = tokenRes.data.userId;
+          console.log('[ChatUI] Stream token received.');
         } catch (tokenErr) {
-          console.warn("Failed to fetch dynamic Stream token for authed user. Falling back to static Dev token.", tokenErr);
-          mappedUser.id = "throbbing-sky-5"; // Must perfectly match VITE_STREAM_USER_TOKEN mapping
+          const status = tokenErr?.response?.status;
+          const hint = tokenErr?.response?.data?.hint;
+          if (status === 503) {
+            // Credentials not configured — surface as a hard error, not a silent fallback
+            setAuthError(hint || 'Stream API credentials are not configured on the server. Add STREAM_API_KEY and STREAM_API_SECRET to Backend/.env');
+            return;
+          }
+          console.warn("Failed to fetch dynamic Stream token. Falling back to static.", tokenErr);
+          mappedUser.id = "throbbing-sky-5";
+        }
+
+        if (!fetchedToken) {
+          // Both dynamic token and static fallback are undefined — can't connect
+          setAuthError('Stream API key is not configured. Add VITE_STREAM_API_KEY and VITE_STREAM_USER_TOKEN to your .env.local file.');
+          return;
         }
 
         setStreamUser(mappedUser);
         setDynamicToken(fetchedToken);
       } catch (err) {
-        console.error("Failed to fetch user for chat:", err);
+        console.error('[ChatUI] Auth failed:', err);
+        // ── FIX: was silently swallowed, leaving streamUser undefined forever ──
+        const msg = err?.response?.status === 401
+          ? 'Session expired. Please log in again.'
+          : 'Could not reach the server. Check your backend is running.';
+        setAuthError(msg);
+      } finally {
+        clearTimeout(timeoutId);
       }
     };
     fetchUserAndToken();
+    return () => clearTimeout(timeoutId);
   }, [isGuest]);
+
+  // ── Error state: show instead of infinite spinner ──
+  if (authError) {
+    return (
+      <div className="flex flex-col h-[80vh] bg-gray-50/50 dark:bg-gray-950/50 rounded-3xl border border-gray-200/50 dark:border-gray-800/50 shadow-2xl items-center justify-center text-gray-900 dark:text-white w-full max-w-6xl mx-auto transition-colors duration-300 gap-4 p-8 text-center">
+        <div className="w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center text-red-400 text-2xl">✕</div>
+        <p className="text-gray-600 dark:text-gray-300 font-medium max-w-sm">{authError}</p>
+        <div className="flex gap-3">
+          <button
+            onClick={() => { setAuthError(null); window.location.reload(); }}
+            className="bg-iris-600 hover:bg-iris-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-colors"
+          >
+            Retry
+          </button>
+          <button
+            onClick={() => navigate('/')}
+            className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 px-6 py-2.5 rounded-xl text-sm font-bold transition-colors"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!streamUser || !dynamicToken) {
     return (
@@ -228,6 +299,13 @@ const ChatUIContent = ({ streamUser, dynamicToken, activeRoom, isPrivate, appThe
             </p>
           </div>
         </div>
+
+        {/* Message Search */}
+        <MessageSearch
+          roomId={activeRoom}
+          onSelectHit={(hit) => console.log('Jump to message:', hit.objectID)}
+          className="hidden md:block"
+        />
       </div>
 
       {/* Stream Chat Area */}

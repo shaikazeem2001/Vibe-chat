@@ -1,10 +1,18 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Plus, Users } from "lucide-react";
+import { TopicGridSkeleton } from "./Skeletons";
 
 const JoinRoom = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Simulate network load — replace with useQuery when backed by API
+  useEffect(() => {
+    const t = setTimeout(() => setIsLoading(false), 600);
+    return () => clearTimeout(t);
+  }, []);
 
   const communities = [
     { id: 'coding', name: 'Coding', description: 'Everything about software development, from web to mobile.', members: '1.2M' },
@@ -47,49 +55,56 @@ const JoinRoom = () => {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredCommunities.map((community) => (
-          <div key={community.id} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col hover:border-iris-500/50 transition-all group">
-            <div className="flex justify-between items-start mb-4">
-              <div className="bg-gray-200 dark:bg-gray-800 p-3 rounded-xl text-iris-600 dark:text-iris-500 transition-colors">
-                <Users size={24} />
+      {isLoading ? (
+        <TopicGridSkeleton count={6} />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {filteredCommunities.map((community) => (
+              <div key={community.id} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col hover:border-iris-500/50 transition-all group">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="bg-gray-200 dark:bg-gray-800 p-3 rounded-xl text-iris-600 dark:text-iris-500 transition-colors">
+                    <Users size={24} />
+                  </div>
+                  <span className="text-xs font-semibold text-gray-600 dark:text-gray-500 bg-gray-200 dark:bg-black px-3 py-1 rounded-full border border-gray-300 dark:border-gray-800 transition-colors">
+                    {community.members} members
+                  </span>
+                </div>
+
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-iris-500 transition-colors uppercase tracking-tight">
+                  r/{community.id}
+                </h3>
+                <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 flex-1 italic line-clamp-2 transition-colors">
+                  "{community.description}"
+                </p>
+
+                <button
+                  onClick={() => handleJoin(community)}
+                  className="w-full bg-gray-900 dark:bg-white text-white dark:text-black font-bold py-3 rounded-xl hover:bg-iris-500 dark:hover:bg-iris-500 hover:text-white dark:hover:text-white transition-all transform active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <Plus size={18} />
+                  Join Community
+                </button>
               </div>
-              <span className="text-xs font-semibold text-gray-600 dark:text-gray-500 bg-gray-200 dark:bg-black px-3 py-1 rounded-full border border-gray-300 dark:border-gray-800 transition-colors">
-                {community.members} members
-              </span>
-            </div>
-
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-iris-500 transition-colors uppercase tracking-tight">
-              r/{community.id}
-            </h3>
-            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 flex-1 italic line-clamp-2 transition-colors">
-              "{community.description}"
-            </p>
-
-            <button
-              onClick={() => handleJoin(community)}
-              className="w-full bg-gray-900 dark:bg-white text-white dark:text-black font-bold py-3 rounded-xl hover:bg-iris-500 dark:hover:bg-iris-500 hover:text-white dark:hover:text-white transition-all transform active:scale-95 flex items-center justify-center gap-2"
-            >
-              <Plus size={18} />
-              Join Community
-            </button>
+            ))}
           </div>
-        ))}
-      </div>
 
-      {filteredCommunities.length === 0 && (
-        <div className="text-center py-20">
-          <p className="text-gray-500 dark:text-gray-500 text-xl italic transition-colors">No communities found matching your search. Why not create one?</p>
-          <button
-            onClick={() => navigate('/profile')}
-            className="mt-6 bg-iris-50 dark:bg-iris-600/10 text-iris-600 dark:text-iris-400 border border-iris-500/30 px-8 py-3 rounded-xl font-bold hover:bg-iris-600 hover:text-white transition-all shadow-lg shadow-iris-600/20"
-          >
-            Create Custom Community
-          </button>
-        </div>
+          {filteredCommunities.length === 0 && (
+            <div className="text-center py-20">
+              <p className="text-gray-500 dark:text-gray-500 text-xl italic transition-colors">No communities found matching your search. Why not create one?</p>
+              <button
+                onClick={() => navigate('/profile')}
+                className="mt-6 bg-iris-50 dark:bg-iris-600/10 text-iris-600 dark:text-iris-400 border border-iris-500/30 px-8 py-3 rounded-xl font-bold hover:bg-iris-600 hover:text-white transition-all shadow-lg shadow-iris-600/20"
+              >
+                Create Custom Community
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
 };
 
 export default JoinRoom;
+
