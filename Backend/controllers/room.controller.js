@@ -63,7 +63,24 @@ exports.createRoom = async (req, res) => {
     res.status(201).json(room);
   } catch (err) {
     console.error("Create room error:", err);
-    res.status(400).json({ message: "Failed to create room" });
+    res.status(400).json({ message: err.message || err.details || "Failed to create room" });
+  }
+};
+
+exports.getRoomById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: room, error } = await supabase
+      .from('rooms')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !room) return res.status(404).json({ message: "Room not found" });
+    
+    res.json(room);
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -87,11 +104,12 @@ exports.getRoomByName = async (req, res) => {
 exports.joinByInviteCode = async (req, res) => {
   try {
     const { inviteCode } = req.body;
+    const normalizedInviteCode = inviteCode.toLowerCase().trim();
     
     const { data: room, error: fetchError } = await supabase
       .from('rooms')
       .select('*')
-      .eq('invite_code', inviteCode)
+      .eq('invite_code', normalizedInviteCode)
       .single();
 
     if (fetchError || !room) return res.status(404).json({ message: "Invalid invite code" });

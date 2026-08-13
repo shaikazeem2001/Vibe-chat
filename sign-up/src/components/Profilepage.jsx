@@ -119,9 +119,30 @@ const Profilepage = () => {
                   }}>
                     <div className="flex justify-between items-start mb-2">
                       <h3 className="font-bold text-gray-900 dark:text-white group-hover:text-iris-500 transition-colors">{community.name}</h3>
-                      <span className="text-xs bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-1 rounded transition-colors">Joined</span>
+                      <div className="flex gap-2 items-center">
+                        <span className={`text-[10px] px-2 py-1 rounded font-bold tracking-wide uppercase transition-colors ${community.is_private ? 'bg-iris-500/10 text-iris-600 dark:text-iris-400 border border-iris-500/20' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-transparent'}`}>
+                          {community.is_private ? 'Private' : 'Public'}
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 transition-colors">{community.description}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 transition-colors mb-3">{community.description}</p>
+                    
+                    {community.is_private && community.invite_code && (
+                      <div 
+                        className="flex items-center justify-between bg-gray-100 dark:bg-black p-2 rounded-lg border border-gray-200 dark:border-gray-800 mt-2 hover:bg-gray-200 dark:hover:bg-gray-800/50 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(community.invite_code);
+                          alert("Invite code copied to clipboard!");
+                        }}
+                      >
+                        <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Invite Code:</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-iris-600 dark:text-iris-400 font-bold tracking-widest">{community.invite_code}</span>
+                          <Copy size={14} className="text-gray-400 transition-colors" />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -256,10 +277,10 @@ const Profilepage = () => {
                 <p className="text-gray-500 dark:text-gray-400 mb-8 transition-colors">Share this invite code with your friends to join your private room.</p>
 
                 <div className="bg-gray-50 dark:bg-black border border-gray-200 dark:border-gray-800 p-4 rounded-2xl flex items-center justify-between mb-8 group cursor-pointer transition-colors" onClick={() => {
-                  navigator.clipboard.writeText(createdRoom.inviteCode);
+                  navigator.clipboard.writeText(createdRoom.invite_code);
                   alert("Invite code copied!");
                 }}>
-                  <span className="text-xl font-mono font-bold text-iris-600 dark:text-iris-400 tracking-wider uppercase transition-colors">{createdRoom.inviteCode}</span>
+                  <span className="text-xl font-mono font-bold text-iris-600 dark:text-iris-400 tracking-wider uppercase transition-colors">{createdRoom.invite_code}</span>
                   <Copy size={20} className="text-gray-400 dark:text-gray-500 group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
                 </div>
 

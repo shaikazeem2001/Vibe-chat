@@ -99,22 +99,40 @@ const PrivateRooms = () => {
                         ) : rooms.length > 0 ? (
                             rooms.map((room) => (
                                 <div
-                                    key={room._id}
-                                    onClick={() => navigate(`/communities/${room._id}`)}
-                                    className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 rounded-2xl hover:border-iris-500/50 transition-all cursor-pointer group flex justify-between items-center"
+                                    key={room.id}
+                                    onClick={() => navigate(`/communities/${room.id}`)}
+                                    className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 rounded-2xl hover:border-iris-500/50 transition-all cursor-pointer group flex flex-col gap-3"
                                 >
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-iris-50 dark:bg-iris-600/10 rounded-xl flex items-center justify-center text-iris-600 dark:text-iris-500 transition-colors">
-                                            <ShieldCheck size={24} />
+                                    <div className="flex justify-between items-center w-full">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-iris-50 dark:bg-iris-600/10 rounded-xl flex items-center justify-center text-iris-600 dark:text-iris-500 transition-colors">
+                                                <ShieldCheck size={24} />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-gray-900 dark:text-white group-hover:text-iris-600 dark:group-hover:text-iris-500 transition-colors">{room.name}</h3>
+                                                <p className="text-[10px] text-gray-500 dark:text-gray-500 flex items-center gap-1 uppercase tracking-tight font-black transition-colors">
+                                                    Private Member
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h3 className="font-bold text-gray-900 dark:text-white group-hover:text-iris-600 dark:group-hover:text-iris-500 transition-colors">{room.name}</h3>
-                                            <p className="text-xs text-gray-500 dark:text-gray-500 flex items-center gap-1 uppercase tracking-tight font-black transition-colors">
-                                                Private Member
-                                            </p>
-                                        </div>
+                                        <ArrowRight size={20} className="text-gray-400 dark:text-gray-700 group-hover:text-iris-600 dark:group-hover:text-iris-500 transform group-hover:translate-x-1 transition-all" />
                                     </div>
-                                    <ArrowRight size={20} className="text-gray-400 dark:text-gray-700 group-hover:text-iris-600 dark:group-hover:text-iris-500 transform group-hover:translate-x-1 transition-all" />
+                                    {room.invite_code && (
+                                        <div 
+                                            className="flex items-center justify-between bg-gray-100 dark:bg-black p-2 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-200 dark:hover:bg-gray-800/50 transition-colors mt-2"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigator.clipboard.writeText(room.invite_code);
+                                                alert("Invite code copied to clipboard!");
+                                            }}
+                                        >
+                                            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Invite Code:</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-mono text-iris-600 dark:text-iris-400 font-bold tracking-widest">{room.invite_code}</span>
+                                                <Copy size={14} className="text-gray-400 transition-colors" />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ))
                         ) : (
@@ -200,10 +218,10 @@ const PrivateRooms = () => {
                                 <p className="text-gray-500 dark:text-gray-400 mb-8 transition-colors">Share this invite code with your friends to join your private room.</p>
 
                                 <div className="bg-gray-50 dark:bg-black border border-gray-200 dark:border-gray-800 p-4 rounded-2xl flex items-center justify-between mb-8 group cursor-pointer transition-colors" onClick={() => {
-                                    navigator.clipboard.writeText(createdRoom.inviteCode);
+                                    navigator.clipboard.writeText(createdRoom.invite_code);
                                     alert("Invite code copied!");
                                 }}>
-                                    <span className="text-xl font-mono font-bold text-iris-600 dark:text-iris-400 tracking-wider uppercase transition-colors">{createdRoom.inviteCode}</span>
+                                    <span className="text-xl font-mono font-bold text-iris-600 dark:text-iris-400 tracking-wider uppercase transition-colors">{createdRoom.invite_code}</span>
                                     <Copy size={20} className="text-gray-400 dark:text-gray-500 group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
                                 </div>
 

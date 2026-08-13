@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Shield, Hash, LogIn } from 'lucide-react';
+import { ArrowLeft, Shield, Hash, LogIn, MoreVertical, Copy } from 'lucide-react';
 import {
   useCreateChatClient,
   Chat,
@@ -241,6 +241,27 @@ const ChatUI = () => {
 
 const ChatUIContent = ({ streamUser, dynamicToken, activeRoom, isPrivate, appTheme, navigate, isGuest }) => {
   const [channel, setChannel] = useState(undefined);
+  const [showMenu, setShowMenu] = useState(false);
+  const [roomDetails, setRoomDetails] = useState(null);
+
+  useEffect(() => {
+    // ALWAYS try to fetch room details to show the proper name and visibility badge
+    const joined = JSON.parse(localStorage.getItem("joinedCommunities") || "[]");
+    const room = joined.find(c => c.id === activeRoom || c.name === activeRoom || c._id === activeRoom);
+    if (room) {
+      setRoomDetails(room);
+    } else {
+      // Fetch by ID if not in local storage (e.g., accessed via direct link)
+      axios.get(`/api/rooms/id/${activeRoom}`).then(res => {
+        setRoomDetails(res.data);
+      }).catch(err => {
+        // Fallback to by name just in case activeRoom is the name
+        axios.get(`/api/rooms/name/${activeRoom}`).then(res => {
+          setRoomDetails(res.data);
+        }).catch(e => console.error("Room fetch error:", e));
+      });
+    }
+  }, [isPrivate, activeRoom]);
 
   const client = useCreateChatClient({
     apiKey,
@@ -284,14 +305,14 @@ const ChatUIContent = ({ streamUser, dynamicToken, activeRoom, isPrivate, appThe
             <ArrowLeft size={20} />
           </button>
           <div className="bg-iris-600/20 p-2.5 rounded-xl text-iris-500 shadow-inner">
-            {isPrivate ? <Shield size={20} /> : <Hash size={20} />}
+            {roomDetails?.is_private ? <Shield size={20} /> : <Hash size={20} />}
           </div>
           <div>
             <h2 className="text-lg md:text-xl font-black text-gray-900 dark:text-white capitalize tracking-wide flex items-center gap-2 transition-colors">
               <span className="text-iris-500/80 text-[10px] font-black bg-iris-500/10 px-2 py-0.5 rounded border border-iris-500/20 uppercase tracking-widest hidden md:inline-block">
-                Community
+                {roomDetails ? (roomDetails.is_private ? 'Private Community' : 'Public Community') : 'Community'}
               </span>
-              {activeRoom}
+              {roomDetails?.name || activeRoom}
             </h2>
             <p className="text-xs text-green-500 flex items-center gap-1.5 mt-0.5">
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
@@ -301,11 +322,45 @@ const ChatUIContent = ({ streamUser, dynamicToken, activeRoom, isPrivate, appThe
         </div>
 
         {/* Message Search */}
-        <MessageSearch
-          roomId={activeRoom}
-          onSelectHit={(hit) => console.log('Jump to message:', hit.objectID)}
-          className="hidden md:block"
-        />
+        <div className="flex items-center gap-2">
+          <MessageSearch
+            roomId={activeRoom}
+            onSelectHit={(hit) => console.log('Jump to message:', hit.objectID)}
+            className="hidden md:block"
+          />
+          {roomDetails?.is_private && roomDetails?.invite_code && (
+            <div className="relative">
+              <button 
+                onClick={() => setShowMenu(!showMenu)}
+                className="p-2 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+              >
+                <MoreVertical size={20} />
+              </button>
+              
+              {showMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-xl z-[100] overflow-hidden">
+                  <div className="p-3">
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-2">Private Invite Code</p>
+                    <div className="flex items-center justify-between bg-gray-50 dark:bg-black p-3 rounded-lg border border-gray-100 dark:border-gray-800">
+                      <span className="font-mono text-iris-600 dark:text-iris-400 font-black tracking-widest">{roomDetails.invite_code}</span>
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(roomDetails.invite_code);
+                          alert("Code copied to clipboard!");
+                          setShowMenu(false);
+                        }}
+                        className="text-gray-400 hover:text-iris-500 transition-colors p-1"
+                        title="Copy code"
+                      >
+                        <Copy size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Stream Chat Area */}
